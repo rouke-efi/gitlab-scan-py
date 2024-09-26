@@ -1,26 +1,20 @@
 import gitlab
-import re
 import os
-import logging
-import argparse
-
-# Configure logging for the 'gitlab' logger
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger('gitlab')
-logger.setLevel(logging.DEBUG)
-gitlab_url = os.environ.get('GITLAB_URL')
-private_token = os.environ.get('GITLAB_GROUP_TOKEN')
-# Optionally, configure logging for 'urllib3' to see HTTP requests
-logging.getLogger('urllib3').setLevel(logging.DEBUG)
-terraform_sp_path = os.environ.get('GROUP_NAME')
-gl = gitlab.Gitlab(gitlab_url, private_token=private_token)
-
-
+import json
+from dotenv import load_dotenv
 
 class GitLabTerraformAnalyzer:
-    def __init__(self, gitlab_url, private_token, output_dir):
+    def __init__(self):
+        load_dotenv()  # Load environment variables from .env file
+        gitlab_url = os.environ.get('GITLAB_URL')
+        private_token = os.environ.get('GITLAB_PRIVATE_TOKEN')
+        self.output_dir = os.environ.get('OUTPUT_DIR', '/output')
+        self.group_path = os.environ.get('GROUP_NAME')
+
+        if not all([gitlab_url, private_token, self.group_path]):
+            raise ValueError("Missing required environment variables. Please check your .env file.")
+
         self.gl = gitlab.Gitlab(gitlab_url, private_token=private_token)
-        self.output_dir = output_dir
 
     def get_group_by_path(self, path):
         try:
@@ -29,7 +23,7 @@ class GitLabTerraformAnalyzer:
             print(f"Error: Group not found at path '{path}'. Please check the path and your permissions.")
             return None
 
-    def search_projects_recursively(self, group, target_name='iac-terraform'):
+    def search_projects_recursively(self, group, target_name='terraform'):
         projects = []
         group_projects = group.projects.list(search=target_name, all=True)
         projects.extend([p for p in group_projects if p.name == target_name])
@@ -70,8 +64,8 @@ class GitLabTerraformAnalyzer:
         
         return result
 
-    def run_analysis(self, group_path):
-        group = self.get_group_by_path(group_path)
+    def run_analysis(self):
+        group = self.get_group_by_path(self.group_path)
         if not group:
             return
 
@@ -86,22 +80,18 @@ class GitLabTerraformAnalyzer:
         self.write_results(results)
 
     def write_results(self, results):
+        os.makedirs(self.output_dir, exist_ok=True)
         output_file = os.path.join(self.output_dir, 'terraform_modules_analysis.json')
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"Analysis results have been written to {os.path.abspath(output_file)}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze Terraform modules in GitLab")
-    parser.add_argument("--gitlab-url", required=True, help="GitLab instance URL")
-    parser.add_argument("--private-token", required=True, help="GitLab private token")
-    parser.add_argument("--group-path", required=True, help="Path to the GitLab group to analyze")
-    parser.add_argument("--output-dir", required=True, help="Directory to store output files")
-    
-    args = parser.parse_args()
-
-    analyzer = GitLabTerraformAnalyzer(args.gitlab_url, args.private_token, args.output_dir)
-    analyzer.run_analysis(args.group_path)
+    try:
+        analyzer = GitLabTerraformAnalyzer()
+        analyzer.run_analysis()
+    except ValueError as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()

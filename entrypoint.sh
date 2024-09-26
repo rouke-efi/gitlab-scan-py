@@ -9,5 +9,5 @@ elif [ "$1" = "compare" ]; then
     python test_out.py
 else
     echo "Running application..."
-    python fetch_gitlab_repos.py
+    python gl-terraform-analyzer.py
 fi
