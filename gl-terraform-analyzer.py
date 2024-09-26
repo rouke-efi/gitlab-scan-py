@@ -1,6 +1,7 @@
 import gitlab
 import os
 import json
+import time
 from dotenv import load_dotenv
 
 class GitLabTerraformAnalyzer:
@@ -15,20 +16,39 @@ class GitLabTerraformAnalyzer:
             raise ValueError("Missing required environment variables. Please check your .env file.")
 
         self.gl = gitlab.Gitlab(self.gitlab_url, private_token=self.private_token)
+        self.rate_limit_remaining = None
+        self.rate_limit_reset_time = None
+
+    def api_call(self, func, *args, **kwargs):
+        while True:
+            if self.rate_limit_remaining is not None and self.rate_limit_remaining < 5:
+                wait_time = self.rate_limit_reset_time - time.time()
+                if wait_time > 0:
+                    print(f"Rate limit approaching. Waiting for {wait_time:.2f} seconds.")
+                    time.sleep(wait_time + 1)  # Add 1 second buffer
+
+            result = func(*args, **kwargs)
+
+            # Update rate limit info
+            if hasattr(self.gl, 'rate_limit'):
+                self.rate_limit_remaining = self.gl.rate_limit.remaining
+                self.rate_limit_reset_time = self.gl.rate_limit.reset_time
+
+            return result
 
     def get_group_by_path(self, path):
         try:
-            return self.gl.groups.get(path)
+            return self.api_call(self.gl.groups.get, path)
         except gitlab.exceptions.GitlabGetError:
             print(f"Error: Group not found at path '{path}'. Please check the path and your permissions.")
             return None
 
     def search_terraform_subgroups(self, group):
         terraform_subgroups = []
-        all_subgroups = group.subgroups.list(all=True)
+        all_subgroups = self.api_call(group.subgroups.list, all=True)
         
         for subgroup in all_subgroups:
-            full_subgroup = self.gl.groups.get(subgroup.id)
+            full_subgroup = self.api_call(self.gl.groups.get, subgroup.id)
             if full_subgroup.name == 'terraform':
                 terraform_subgroups.append(full_subgroup)
             terraform_subgroups.extend(self.search_terraform_subgroups(full_subgroup))
@@ -37,24 +57,24 @@ class GitLabTerraformAnalyzer:
 
     def search_terraform_projects(self, group):
         terraform_projects = []
-        projects = group.projects.list(all=True)
+        projects = self.api_call(group.projects.list, all=True)
         for project in projects:
-            full_project = self.gl.projects.get(project.id)
+            full_project = self.api_call(self.gl.projects.get, project.id)
             if self.project_has_terraform_files(full_project):
                 terraform_projects.append(full_project)
         return terraform_projects
 
     def project_has_terraform_files(self, project):
         try:
-            project.files.get(file_path='main.tf', ref='main')
-            project.files.get(file_path='version.json', ref='main')
+            self.api_call(project.files.get, file_path='main.tf', ref='main')
+            self.api_call(project.files.get, file_path='version.json', ref='main')
             return True
         except gitlab.exceptions.GitlabGetError:
             return False
 
     def get_file_content(self, project, file_path):
         try:
-            file_content = project.files.get(file_path=file_path, ref='main')
+            file_content = self.api_call(project.files.get, file_path=file_path, ref='main')
             return file_content.decode().decode('utf-8')
         except gitlab.exceptions.GitlabGetError:
             return None
