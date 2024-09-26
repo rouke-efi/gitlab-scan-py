@@ -49,6 +49,15 @@ def main():
     iac_projects = search_projects_recursively(terraform_sp_group)
 
     print(f"\nFound {len(iac_projects)} 'iac-terraform' projects:")
+    
+    # Write project URLs to a file
+    output_file = 'iac_terraform_projects.txt'
+    with open(output_file, 'w') as f:
+        for project in iac_projects:
+            f.write(f"{project.web_url}\n")
+
+    print(f"\nProject URLs have been written to {os.path.abspath(output_file)}")
+
     for project in iac_projects:
         print(f"Project: {project.name}, Path: {project.path_with_namespace}")
 
