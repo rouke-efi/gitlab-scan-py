@@ -15,11 +15,11 @@ You can run the Python script using the provided Dockerfile.
 Create a `.env` file to store credentials and configuration:
 
 ```
-GITLAB_URL=https://your-gitlab-instance.com
-GITLAB_PRIVATE_TOKEN=your-private-token
-GITLAB_GROUP_PATH=/path/to/group
-PATTERN=r'^your-pattern$'
-OUTPUT_DIR=/path-to-output-json
+GITLAB_URL=<gl-url>
+GITLAB_GROUP_TOKEN=<token>
+GITLAB_GROUP_PATH=<main group for search>
+PATTERN=r'^terraform$' # not in use TBD
+OUTPUT_DIR=/output
 ```
 
 ### Build the Image

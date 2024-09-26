@@ -5,16 +5,16 @@ from dotenv import load_dotenv
 
 class GitLabTerraformAnalyzer:
     def __init__(self):
-        load_dotenv()  # Load environment variables from .env file
-        gitlab_url = os.environ.get('GITLAB_URL')
-        private_token = os.environ.get('GITLAB_PRIVATE_TOKEN')
+        load_dotenv()
+        self.gitlab_url = os.environ.get('GITLAB_URL')
+        self.private_token = os.environ.get('GITLAB_GROUP_TOKEN')
         self.output_dir = os.environ.get('OUTPUT_DIR', '/output')
-        self.group_path = os.environ.get('GROUP_NAME')
+        self.group_path = os.environ.get('GITLAB_GROUP_PATH')
 
-        if not all([gitlab_url, private_token, self.group_path]):
+        if not all([self.gitlab_url, self.private_token, self.group_path]):
             raise ValueError("Missing required environment variables. Please check your .env file.")
 
-        self.gl = gitlab.Gitlab(gitlab_url, private_token=private_token)
+        self.gl = gitlab.Gitlab(self.gitlab_url, private_token=self.private_token)
 
     def get_group_by_path(self, path):
         try:
@@ -23,17 +23,34 @@ class GitLabTerraformAnalyzer:
             print(f"Error: Group not found at path '{path}'. Please check the path and your permissions.")
             return None
 
-    def search_projects_recursively(self, group, target_name='terraform'):
-        projects = []
-        group_projects = group.projects.list(search=target_name, all=True)
-        projects.extend([p for p in group_projects if p.name == target_name])
+    def search_terraform_subgroups(self, group):
+        terraform_subgroups = []
+        all_subgroups = group.subgroups.list(all=True)
         
-        subgroups = group.subgroups.list(all=True)
-        for subgroup in subgroups:
+        for subgroup in all_subgroups:
             full_subgroup = self.gl.groups.get(subgroup.id)
-            projects.extend(self.search_projects_recursively(full_subgroup, target_name))
+            if full_subgroup.name == 'terraform':
+                terraform_subgroups.append(full_subgroup)
+            terraform_subgroups.extend(self.search_terraform_subgroups(full_subgroup))
         
-        return projects
+        return terraform_subgroups
+
+    def search_terraform_projects(self, group):
+        terraform_projects = []
+        projects = group.projects.list(all=True)
+        for project in projects:
+            full_project = self.gl.projects.get(project.id)
+            if self.project_has_terraform_files(full_project):
+                terraform_projects.append(full_project)
+        return terraform_projects
+
+    def project_has_terraform_files(self, project):
+        try:
+            project.files.get(file_path='main.tf', ref='main')
+            project.files.get(file_path='version.json', ref='main')
+            return True
+        except gitlab.exceptions.GitlabGetError:
+            return False
 
     def get_file_content(self, project, file_path):
         try:
@@ -43,7 +60,7 @@ class GitLabTerraformAnalyzer:
             return None
 
     def analyze_project(self, project):
-        module_name = project.path  # Using project path as module name
+        module_name = project.path
         version_json_content = self.get_file_content(project, 'version.json')
         
         result = {
@@ -55,27 +72,30 @@ class GitLabTerraformAnalyzer:
         if version_json_content:
             try:
                 version_data = json.loads(version_json_content)
-                # Handle both possible JSON structures
                 if isinstance(version_data, list):
                     version_data = version_data[0]
-                result["version"] = version_data.get("version")
+                result["version"] = version_data.get("module_version")
             except json.JSONDecodeError:
                 print(f"Error: Invalid JSON in version.json for project {project.web_url}")
         
         return result
 
     def run_analysis(self):
-        group = self.get_group_by_path(self.group_path)
-        if not group:
+        main_group = self.get_group_by_path(self.group_path)
+        if not main_group:
             return
 
-        print(f"Searching for 'iac-terraform' projects in {group.full_path} and all its subgroups...")
-        projects = self.search_projects_recursively(group)
-        print(f"Found {len(projects)} 'iac-terraform' projects.")
+        print(f"Searching for 'terraform' subgroups in {main_group.full_path} and all its subgroups...")
+        terraform_subgroups = self.search_terraform_subgroups(main_group)
+        print(f"Found {len(terraform_subgroups)} 'terraform' subgroups.")
 
         results = []
-        for project in projects:
-            results.append(self.analyze_project(project))
+        for subgroup in terraform_subgroups:
+            print(f"Searching for Terraform projects in subgroup: {subgroup.full_path}")
+            projects = self.search_terraform_projects(subgroup)
+            print(f"Found {len(projects)} Terraform projects in {subgroup.full_path}")
+            for project in projects:
+                results.append(self.analyze_project(project))
 
         self.write_results(results)
 
