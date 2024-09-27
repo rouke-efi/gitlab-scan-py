@@ -35,8 +35,11 @@ docker build -t fetch-repos .
 The container supports a `test` command for running unit tests. To run the main script, omit this argument.
 
 ```bash
-docker run --rm --env-file .env -v /full/path/to/dir/on/your/local/host:/output fetch-repos:latest [test]
+docker run --rm --env-file .env -v /full/path/to/dir/on/your/local/host:/output fetch-repos:latest [test/module]
 ```
+- [module] - is for searching and listing all modules found in all projects *iac-terraform* source and the versions of these modules
+
+- [test] - is to run some unit tests for *gl_terraform_analyzer* script
 
 Replace `/full/path/to/dir/on/your/local/host` with the actual path where you want the output JSON file to be saved.
 

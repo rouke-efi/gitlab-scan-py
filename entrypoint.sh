@@ -4,10 +4,10 @@ set -e
 if [ "$1" = "test" ]; then
     echo "Running unit tests..."
     python -m unittest test_gl_terraform_analyzer.py
-elif [ "$1" = "compare" ]; then
-    echo "Running comparison..."
-    python test_out.py
+elif [ "$1" = "modules" ]; then
+    echo "Find all modules with current versions"
+    python gl_fetch_modules_in_use.py
 else
-    echo "Running application..."
+    echo "Find all modules in use with version"
     python gl_terraform_analyzer.py
 fi
