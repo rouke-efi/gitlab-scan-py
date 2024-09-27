@@ -12,7 +12,7 @@ class GitLabTerraformAnalyzer:
         self.output_dir = os.environ.get('OUTPUT_DIR', '/output')
         self.group_path = os.environ.get('GITLAB_GROUP_PATH')
 
-        if not all([self.gitlab_url, self.private_token, self.group_path]):
+        if not all([self.gitlab_url, self.private_token, self.group_path, self.output_dir]):
             raise ValueError("Missing required environment variables. Please check your .env file.")
 
         self.gl = gitlab.Gitlab(self.gitlab_url, private_token=self.private_token)
