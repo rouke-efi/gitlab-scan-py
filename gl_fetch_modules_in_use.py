@@ -45,7 +45,7 @@ class GitLabTerraformModuleAnalyzer:
         iac_terraform_projects = []
         projects = self.api_call(group.projects.list, all=True)
         for project in projects:
-            if project.name == 'iac-terraform':
+            if project.name == 'iac_terraform':
                 full_project = self.api_call(self.gl.projects.get, project.id)
                 iac_terraform_projects.append(full_project)
 
